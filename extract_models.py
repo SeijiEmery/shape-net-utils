@@ -113,12 +113,71 @@ class ShapenetArchive:
     def __exit__ (self, type, value, traceback):
         self.close()
 
+
+class FileCache ():
+    """ File cache layer for ShapenetZipArchive. Will only effectively store the .json file """
+
+    def __init__ (self, archive, cache_dir = './.cached_files'):
+        print("Loading file cache...")
+        self.archive = archive
+        self.cache_dir = cache_dir
+        self.file_cache = {}
+        if os.path.exists(cache_dir):
+            for root, dirs, files in os.walk(cache_dir):
+                for file in files:
+                    path = os.path.join(*(dirs + [ file ]))
+                    cache_dir = os.path.join(root, path)
+                    self.file_cache[path] = cache_dir
+
+        for path, cache_path in self.file_cache.items():
+            print("   cache '%s' => '%s'"%(path, cache_path))
+
+    def open (self, path, *args, **kwargs):
+        # If file not in cache, read it from archive and write it to file cache
+        if path not in self.file_cache:
+            cached_path = os.path.join(self.cache_dir, path)
+            self.file_cache[path] = cached_path
+
+            with self.archive.open(path, 'r') as input_file:
+
+                # Make directories
+                path_dirs = os.path.split(cached_path)[0]
+                if not os.path.exists(path_dirs):
+                    os.makedirs(path_dirs)
+
+                # Write file
+                print("Writing '%s' to cache (at '%s')"%(path, cached_path))
+                data = input_file.read()
+                try:
+                    with open(cached_path, 'w') as f:
+                        f.write(data)
+                except TypeError:
+                    with open(cached_path, 'wb') as f:
+                        f.write(data)
+
+        # Read cached file from disk
+        return open(self.file_cache[path], *args, **kwargs)
+
+    def close (self):
+        self.archive.close()
+
+    # Forward __enter__ / __exit__ to archive
+
+    def __enter__ (self):
+        self.archive.__enter__()
+        return self
+
+    def __exit__ (self, *args):
+        self.archive.__exit__(*args)
+
+
 class ShapenetZipArchive (ShapenetArchive):
     """ Encapsulates a lazily loaded ZipFile archive w/ file caching """
 
     def __init__ (self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.archive = None
+        self.cache_dir = './.cached-files'
 
     def lazy_load (self):
         if not self.archive:
@@ -136,6 +195,7 @@ class ShapenetZipArchive (ShapenetArchive):
             print("Closing '%s'"%self.path)
             self.archive.close()
             self.archive = None
+
 
 class ShapenetDirArchive (ShapenetArchive):
     """ Encapsulates a plain unzipped directory w/ the same interface as ShapenetZipArchive """
@@ -156,7 +216,7 @@ def load_shapenet_archive (path):
     via ShapenetZipArchive and ShapenetDirArchive w/ a duck-typed interface
     """
     if path.endswith('.zip'):
-        return ShapenetZipArchive(path)
+        return FileCache(ShapenetZipArchive(path))
     return ShapenetDirArchive(path)
 
 #
