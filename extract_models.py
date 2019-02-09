@@ -1,6 +1,8 @@
 import os
 import json
 import zipfile
+import pickle
+from time import time
 
 #
 # Helper functions
@@ -170,6 +172,48 @@ class FileCache ():
     def __exit__ (self, *args):
         self.archive.__exit__(*args)
 
+    def __getattr__ (self, attr):
+        return self.archive.__getattribute__(attr)
+
+# SERIALIZATION_TYPE = '.pkl.zip'
+# SERIALIZATION_TYPE = '.pkl'
+SERIALIZATION_TYPE = '.json'
+
+def open_maybe_compressed (path, mode, action):
+    if path.endswith('.zip'):
+        with zipfile.Zipfile(path, mode.strip('b')) as zfile:
+            with zfile.open(path.strip('.zip'), mode.strip('b')) as f:
+                return action(f)
+    else:
+        with open(path, mode) as f:
+            return action(f)
+
+def serialize_object (name, data):
+    print("Saving '%s'..."%name)
+    t0 = time()
+    actions = {
+        '.json': lambda f: f.write(json.dumps(data)),
+        '.pkl': lambda f: pickle.dump(f, data)
+    }
+    mode = { '.json': 'w', 'pkl': 'wb' }
+    path = name + SERIALIZATION_TYPE
+    ext = SERIALIZATION_TYPE.split('.zip')[0]
+    open_maybe_compressed(path, mode[ext], actions[ext])
+    print("Saved in %s"%(time() - t0))
+
+def deserialize_object (name):
+    print("Attempting to load '%s'..."%name)
+    t0 = time()
+    actions = {
+        '.json': lambda f: json.loads(f.read()),
+        '.pkl': lambda f: pickle.load(f)
+    }
+    mode = { '.json': 'r', 'pkl': 'rb' }
+    path = name + SERIALIZATION_TYPE
+    ext = SERIALIZATION_TYPE.split('.zip')[0]
+    result = open_maybe_compressed(path, mode[ext], actions[ext])
+    print("Loaded in %s"%(time() - t0))
+    return result
 
 class ShapenetZipArchive (ShapenetArchive):
     """ Encapsulates a lazily loaded ZipFile archive w/ file caching """
@@ -177,18 +221,132 @@ class ShapenetZipArchive (ShapenetArchive):
     def __init__ (self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.archive = None
+        self.file_index = None
         self.cache_dir = './.cached-files'
 
     def lazy_load (self):
         if not self.archive:
             print("Loading '%s'..."%self.path)
+            t0 = time()
             self.root_path = os.path.split(self.path)[1].strip('.zip')
             self.archive   = zipfile.ZipFile(self.path, 'r')
+            print("Loaded in %s"%(time() - t0))
+
+    def load_file_index (self):
+        if not self.file_index:
+            try:
+                self.file_index = deserialize_object('file_index')
+            except FileNotFoundError:
+                self.lazy_load()
+                self.file_index = self.build_file_index(self.archive.namelist())
+                serialize_object('file_index', self.file_index)
+
+    def build_file_index (self, files):
+        print("Building file index...")
+        t0 = time()
+        files_by_first_subdir_prefix = {}
+        for file in files:
+            try:
+                prefix = file.split('/')[1]
+                if prefix not in files_by_first_subdir_prefix:
+                    files_by_first_subdir_prefix[prefix] = list()
+                files_by_first_subdir_prefix[prefix].append(file)
+            except IndexError:
+                pass
+
+        print(files_by_first_subdir_prefix.keys())
+        print("Finished in %s"%(time() - t0))
+        return files_by_first_subdir_prefix
+
+    def get_files_to_extract (self, paths):
+        self.load_file_index()
+        missing_files = [
+            path for path in paths
+            if path not in self.file_index
+        ]
+        if missing_files:
+            print("Warning: archive is incomplete, missing %s / %s synset subdirectories: %s"%(
+                len(missing_files), len(paths), missing_files))
+        return {
+            path: self.file_index[path]
+            for path in paths
+            if path in self.file_index
+        }
+
+    def extract_files (self, paths, target_dir):
+        files = self.get_files_to_extract(paths)
+        self.lazy_load()
+        for synset, paths in files.items():
+            print("Extracting synset '%s' (%s files...)"%(synset, len(paths)))
+            files_extracted = 0
+            for path in paths:
+                # print("Extracting %s"%path)
+                self.archive.extract(path, target_dir)
+                files_extracted += 1
+                if files_extracted % 500 == 0:
+                    print("%s / %s: %d%%"%(
+                        files_extracted, len(paths),
+                        int(files_extracted / len(paths) * 100)))
+
+    def resolve_path (self, path):
+        return os.path.join(self.root_path, path)
 
     def open (self, path, *args, **kwargs):
         self.lazy_load()
-        path = os.path.join(self.root_path, path)
-        return self.archive.open(path, *args, **kwargs)
+        return self.archive.open(self.resolve_path(path), *args, **kwargs)
+
+    def exists (self, path):
+        self.lazy_load()
+        try:
+            self.archive.getinfo()
+            return True
+        except KeyError:
+            return False
+
+    def extract_paths (self, paths, target_dir):
+        self.lazy_load()
+
+    def get_extraction_task (self, path):
+        self.lazy_load()
+        extract_task = {
+            'name': path,
+            'paths': [],
+            'extracted_size': 0,
+            'compressed_size': 0,
+            'num_files': 0
+        }
+        print("Building extraction task for '%s'"%path)
+        path = self.resolve_path(path)
+        for file in self.archive.namelist():
+            if file.startswith(path):
+                info = self.archive.getinfo(file)
+                extract_task['paths'].append(file)
+                extract_task['extracted_size'] += info.file_size
+                extract_task['compressed_size'] += info.compress_size
+                extract_task['num_files'] += 1
+        return extract_task
+
+    def do_extraction (self, target_dir, extract_task):
+        self.lazy_load()
+        print("Extracting '%s' (%s files, %s compressed, %s extracted)"%(
+            extract_task['name'], 
+            extract_task['num_files'],
+            as_bytes(extract_task['compressed_size']),
+            as_bytes(extract_task['extracted_size'])
+        ))
+        for path in extract_task['paths']:
+            self.archive.extract(path, target_dir)
+
+    def extract (self, path, target_dir):
+        print("Extracting '%s'"%path)
+        self.lazy_load()
+        path = self.resolve_path(path)
+        for file in self.archive.namelist():
+            if file.startswith(path):
+                info = self.archive.getinfo(file)
+                print("Extracting '%s' (compressed %s => extracted %s)"%(
+                    path, info.compress_size, info.file_size))
+                self.archive.extract(file, target_dir)
 
     def close (self):
         if self.archive:
@@ -200,13 +358,25 @@ class ShapenetZipArchive (ShapenetArchive):
 class ShapenetDirArchive (ShapenetArchive):
     """ Encapsulates a plain unzipped directory w/ the same interface as ShapenetZipArchive """
 
+    def resolve_path (self, path):
+        return os.path.join(self.path, path)
+
     def open (self, path, *args, **kwargs):
-        path = os.path.join(self.path, path)
+        path = self.resolve_path(path)
         if not os.path.exists(path):
             raise Exception("File '%s' does not exist!"%path)
         return open(path, *args, **kwargs)
 
     def close (self):
+        pass
+
+    def exists (self, path):
+        return os.path.exists(self.resolve_path(path))
+
+    def listdir (self, path):
+        return os.listdir(self.resolve_path(path))
+
+    def extract (self, path, target_dir):
         pass
 
 
@@ -271,35 +441,27 @@ def get_matching_shapenet_model_ids (shapenet_archive, matching_keywords, non_ma
     # print(matching_synsets)
 
 #
-# Resolve into actual directory paths
+# Extract files...
 #
 
-# TBD
-
-#
-# Extract files to an external directory
-#
-
-# TBD
-
-def extract_models (shapenet_dir, keywords, output_dir):
-    pass
-
-# TBD: add zip file support for all of the above
-
-def print_zip_archive_contents (shapenet_zip_archive):
-    for file in shapenet_zip_archive.infolist():
-        print(file)
-
+def extract_models (shapenet_archive, output_dir, *args, **kwargs):
+    synset_dirs = get_matching_shapenet_model_ids(shapenet_archive, *args, **kwargs)
+    shapenet_archive.extract_files(synset_dirs, output_dir)
 
 if __name__ == '__main__':
     # extract_models()
 
     shapenet_path = './ShapeNetCore.v2.zip'
+    # shapenet_path = './ShapeNetCore.v2'
     # shapenet_path = 'shapenet'
     with load_shapenet_archive(shapenet_path) as shapenet_archive:
-        get_matching_shapenet_model_ids(shapenet_archive, [ 'car' ])
-        print()
-        get_matching_shapenet_model_ids(shapenet_archive, [ 'car' ], [ 'cruiser', 'minvan', 'jeep' ])
-        print()
-        get_matching_shapenet_model_ids(shapenet_archive, [ 'jeep' ], [])
+        # shapenet_archive.load_file_index()
+        # shapenet_archive.lazy_load()
+        # get_shapenet_model_directories_matching_query(shapenet_archive, [ 'car' ])
+        # print()
+        # get_shapenet_model_directories_matching_query(shapenet_archive, [ 'car' ], [ 'cruiser', 'minvan', 'jeep' ])
+        # print()
+        # get_shapenet_model_directories_matching_query(shapenet_archive, [ 'jeep' ], [])
+        extract_models(shapenet_archive, 'jeep_models', [ 'jeep' ])
+        extract_models(shapenet_archive, 'car_models', [ 'car'])
+        # extract_models(shapenet_archive, 'all_models', [])
