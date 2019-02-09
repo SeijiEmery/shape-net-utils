@@ -1,5 +1,6 @@
 import os
 import json
+import zipfile
 
 #
 # Helper functions
@@ -99,22 +100,78 @@ assert_keyword_list_match('a,b', set([ 'a', 'b' ]), set([ 'a' ]), False)
 assert_keyword_list_match('a,b', set([ 'a', 'b' ]), set([ 'c' ]), True)
 
 #
+# Utility for reading files .zip or directory files...
+#
+
+class ShapenetArchive:
+    def __init__ (self, path):
+        self.path = path
+
+    def __enter__ (self):
+        return self
+
+    def __exit__ (self, type, value, traceback):
+        self.close()
+
+class ShapenetZipArchive (ShapenetArchive):
+    """ Encapsulates a lazily loaded ZipFile archive w/ file caching """
+
+    def __init__ (self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.archive = None
+
+    def lazy_load (self):
+        if not self.archive:
+            print("Loading '%s'..."%self.path)
+            self.root_path = os.path.split(self.path)[1].strip('.zip')
+            self.archive   = zipfile.ZipFile(self.path, 'r')
+
+    def open (self, path, *args, **kwargs):
+        self.lazy_load()
+        path = os.path.join(self.root_path, path)
+        return self.archive.open(path, *args, **kwargs)
+
+    def close (self):
+        if self.archive:
+            print("Closing '%s'"%self.path)
+            self.archive.close()
+            self.archive = None
+
+class ShapenetDirArchive (ShapenetArchive):
+    """ Encapsulates a plain unzipped directory w/ the same interface as ShapenetZipArchive """
+
+    def open (self, path, *args, **kwargs):
+        path = os.path.join(self.path, path)
+        if not os.path.exists(path):
+            raise Exception("File '%s' does not exist!"%path)
+        return open(path, *args, **kwargs)
+
+    def close (self):
+        pass
+
+
+def load_shapenet_archive (path):
+    """ Loads a shapenet archive (either .zip or plain root directory), encapsulating
+    the different kinds of shapenet archives that may be used (either .zip or unzipped)
+    via ShapenetZipArchive and ShapenetDirArchive w/ a duck-typed interface
+    """
+    if path.endswith('.zip'):
+        return ShapenetZipArchive(path)
+    return ShapenetDirArchive(path)
+
+#
 # Get shapenet ids from taxonomy.json
 #
 
-def get_matching_shapenet_model_ids (shapenet_dir, matching_keywords, non_matching_keywords=None):
+def get_matching_shapenet_model_ids (shapenet_archive, matching_keywords, non_matching_keywords=None):
     """ finds + returns matching synsetIds from matching shapenet
-    taxonomy groups in <shapenet_dir>/taxonomy.json """
-
+    taxonomy groups in <shapnet_zip_archive>/taxonomy.json """
 
     matching_keywords = set(matching_keywords or [])
     non_matching_keywords = set(non_matching_keywords or [])
 
-    taxonomy_path = os.path.join(shapenet_dir, 'taxonomy.json')
-    if not os.path.exists(taxonomy_path):
-        raise Exception("file '%s' does not exist!"%taxonomy_path)
-
-    with open(taxonomy_path, 'r') as f:
+    taxonomy_path = 'taxonomy.json'
+    with shapenet_archive.open(taxonomy_path, 'r') as f:
         data = json.loads(f.read())
 
     items_by_synset = {
@@ -170,10 +227,19 @@ def extract_models (shapenet_dir, keywords, output_dir):
 
 # TBD: add zip file support for all of the above
 
+def print_zip_archive_contents (shapenet_zip_archive):
+    for file in shapenet_zip_archive.infolist():
+        print(file)
+
+
 if __name__ == '__main__':
     # extract_models()
-    get_matching_shapenet_model_ids('shapenet', [ 'car' ])
-    print()
-    get_matching_shapenet_model_ids('shapenet', [ 'car' ], [ 'cruiser', 'minvan', 'jeep' ])
-    print()
-    get_matching_shapenet_model_ids('shapenet', [ 'jeep' ], [])
+
+    shapenet_path = './ShapeNetCore.v2.zip'
+    # shapenet_path = 'shapenet'
+    with load_shapenet_archive(shapenet_path) as shapenet_archive:
+        get_matching_shapenet_model_ids(shapenet_archive, [ 'car' ])
+        print()
+        get_matching_shapenet_model_ids(shapenet_archive, [ 'car' ], [ 'cruiser', 'minvan', 'jeep' ])
+        print()
+        get_matching_shapenet_model_ids(shapenet_archive, [ 'jeep' ], [])
