@@ -158,14 +158,35 @@ def obj_extract_params (objdata):
 
     return flatten(objdata['verts'])
 
-def extract_params (*objpaths, export_path=None, **kwargs):
+def locate_obj_files_in_directory (path):
+    return [
+        os.path.join(dir, file)
+        for dir, subdirs, files in os.walk(path)
+        for file in files
+        if file.endswith('.obj')
+    ]
+
+def extract_params (
+        directory = None,
+        files = None,
+        export_path = None,
+        **kwargs):
+
+    objpaths = files or []
+    if directory:
+        objpaths += locate_obj_files_in_directory(directory)
+    objpaths = set(objpaths)
+
+    if not objpaths:
+        raise Exception("No input files! (objdir = %s, objpaths = %s)"%(directory, files))
+
     if export_path is None:
-        raise Exception("Invalid export path!")
+        raise Exception("Missing export path!")
 
     if not os.path.exists(export_path):
         os.makedirs(export_path)
 
-    for path in objpaths:
+    for i, path in enumerate(objpaths):
         print("Loading '%s'"%path)
         objdata, errors = read_obj(path, expect_verts_normalized=False, **kwargs)
         if errors:
@@ -174,19 +195,19 @@ def extract_params (*objpaths, export_path=None, **kwargs):
         else:
             data = obj_extract_params(objdata)
             filename = os.path.split(path)[1].split('.')[0]
-            for ext in ('.json', '.pkl', '.json.zip', '.pkl.zip'):
-                output_path = os.path.join(export_path, filename + ext)
-                serialize_object(output_path, data)
-
-            # print("Saving as '%s'"%output_path)
-            # with open(output_path, 'wb') as f:
-            #     pickle.dump(data, f)
+            output_path = os.path.join(export_path, filename + '.json')
+            # output_path = os.path.join(export_path, filename + '.pkl')
+            serialize_object(output_path, data)
+            print("Done: %d / %d"%(i + 1, len(objpaths)))
 
 if __name__ == '__main__':
     # validate_data_samples(
     extract_params(
-        '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
-        '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
-        '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
+        # directory='/Users/semery/Downloads/cubeheightobj',
+        files = [
+            '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
+            '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
+            '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
+        ],
         export_path='./data_params'
     )
