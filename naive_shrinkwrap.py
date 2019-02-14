@@ -43,10 +43,47 @@ def import_and_join_obj (path, join_into = None):
     print("joined into %s"%ctx['active_object'])
     return ctx['active_object']
 
+def apply_shrinkwrap (src, dst, subdivisions):
+    print("Creating modifiers...")
+    subdiv_modifier = dst.modifiers.new(name='subdiv', type='SUBSURF')
+    subdiv_modifier.levels = subdivisions
+    subdiv_modifier.render_levels = subdivisions
+
+    shrinkwrap_modifier = dst.modifiers.new(name='shrinkwrap', type='SHRINKWRAP')
+    shrinkwrap_modifier.target = src
+
+    print("Applying modifiers...")
+    bpy.context.scene.objects.active = dst
+    bpy.ops.object.modifier_apply(modifier='subdiv')
+    bpy.ops.object.modifier_apply(modifier='shrinkwrap')
+    print("Done")
+    return dst
+
+def delete_everything_but_object (obj):
+    bpy.ops.object.select_all(action='SELECT')
+    obj.select = False
+    bpy.ops.object.delete()
+    obj.select = True
+    return obj
+
+def export_obj (obj, path):
+    delete_everything_but_object(obj)
+    bpy.ops.export_scene.obj(filepath=path)
+
+
+def execute_shrinkwrap (import_path, export_path, subdivisions):
+    clear_all_objects()
+    obj = import_and_join_obj(import_path)
+    result = bpy.ops.mesh.primitive_cube_add()
+    cube = bpy.context.active_object
+
+    print("Imported object = %s"%obj)                       # joined obj components
+    print("Target object = %s"%cube)
+    apply_shrinkwrap(src=obj, dst=cube, subdivisions=subdivisions)
+    export_obj(cube, export_path)
+
 
 if __name__ == '__main__':
     OBJ_IMPORT_PATH = "/Users/semery/projects/shape-net-utils/car_models/ShapeNetCore.v2/02958343/1a0bc9ab92c915167ae33d942430658c/models/model_normalized.obj"
-    # clear_all_objects()
-    obj = import_and_join_obj(OBJ_IMPORT_PATH)
-    print("Imported object = %s"%obj)                       # joined obj components
-    print("active object = %s"%bpy.context.active_object)   # default cube - fine, we'll apply shrinkwrap to this
+    OBJ_EXPORT_PATH = "/Users/semery/projects/shape-net-utils/shrinkwrap-exports/02958343-1a0bc9ab92c915167ae33d942430658c.obj"
+    do_naive_shrinkwrap(OBJ_IMPORT_PATH, OBJ_EXPORT_PATH, subdivisions = 2)
