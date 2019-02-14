@@ -18,7 +18,7 @@ def parse_obj_line (line, data,
                 if expect_verts_normalized:
                     raise Exception("vertex not normalized!")
 
-        data['verts'] += [ x, y, z ]
+        data['verts'] += [ (x, y, z) ]
 
     elif line.startswith('vn '):
         x, y, z = map(float, line[3:].strip().split())
@@ -29,7 +29,7 @@ def parse_obj_line (line, data,
                 if expect_normals_normalized:
                     raise Exception("vertex normal not normalized!")
 
-        data['normals'] += [ x, y, z ]
+        data['normals'] += [ (x, y, z) ]
 
     elif line.startswith('f '):
         indices = list(map(int, line[2:].strip().split()))
@@ -93,11 +93,11 @@ def read_obj (path, check_face_index_bounds = True, **kwargs):
 
     # Check consistency...
     if check_face_index_bounds:
-        if data['min_face_index'] < 0 and abs(data['min_face_index']) >= len(data['verts']):
+        if data['min_face_index'] < 0 and abs(data['min_face_index']) >= len(data['verts']) * 3:
             errors.append("min face index %s out of bounds! (%s verts)"%(
                 data['min_face_index'], len(data['verts'])))
 
-        if data['max_face_index'] >= len(data['verts']):
+        if data['max_face_index'] >= len(data['verts']) * 3:
             errors.append("max face index %s out of bounds! (%s verts)"%(
                 data['max_face_index'], len(data['verts'])))
 
