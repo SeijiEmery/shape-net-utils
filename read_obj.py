@@ -136,8 +136,30 @@ def validate_data_samples (*objpaths, **kwargs):
     print("\thave matching topology: %s"%topology_valid)
     print("\tvertices are normalized: %s"%normals_valid)
 
+def obj_extract_params (objdata):
+    corners = objdata['verts'][:8]
+    print("Corners:")
+    sign = [ '-', '+' ]
+    for i, verts in enumerate(corners):
+        print("%sx %sy %sz: %s"%(
+            sign[i & 1], sign[(i >> 1) & 1], sign[(i >> 2) & 1],
+            verts
+        ))
+    print("%s remaining vertices"%(len(objdata['verts'][8:])))
+
+def extract_params (*objpaths, **kwargs):
+    for path in objpaths:
+        print("Loading '%s'"%path)
+        objdata, errors = read_obj(path, expect_verts_normalized=False, **kwargs)
+        if errors:
+            print("Failed to load '%s' (%d errors):\n\t%s"%(
+                path, len(errors), '\n\t'.join(errors)))
+        else:
+            obj_extract_params(objdata)
+
 if __name__ == '__main__':
-    validate_data_samples(
+    # validate_data_samples(
+    extract_params(
         '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
         '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
         '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
