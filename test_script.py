@@ -23,14 +23,5 @@ run_self()
 # End header...
 import bpy
 
-def import_obj (path):
-    result = bpy.ops.import_scene.obj(filepath=path)
-    if 'FINISHED' not in result:
-        raise Exception("Obj import failed: '%s'"%path)
-    print("selected objects: %s"%bpy.context.selected_objects)
-
 print("Hello, world!")
 print("Commandline args: %s"%sys.argv)
-
-import_obj("/Users/semery/projects/shape-net-utils/car_models/ShapeNetCore.v2/02958343/1a0bc9ab92c915167ae33d942430658c/models/model_normalized.obj")
-
