@@ -12,6 +12,9 @@ if sys.argv[0].split('.exe')[0].endswith('blender') and sys.argv[1] == '-b' and 
     origin_script_working_directory = os.path.split(sys.argv[3])[0]
     print("setting working directory for imports: '%s'"%origin_script_working_directory)
     sys.path.insert(0, origin_script_working_directory)
+    argv = sys.argv[3:]
+else:
+    argv = sys.argv
 
 # re-run self from within blender if bpy not available.
 # lets you run this script directly, while really running it from within blender's python install.
@@ -82,8 +85,18 @@ def execute_shrinkwrap (import_path, export_path, subdivisions):
     apply_shrinkwrap(src=obj, dst=cube, subdivisions=subdivisions)
     export_obj(cube, export_path)
 
-
 if __name__ == '__main__':
-    OBJ_IMPORT_PATH = "/Users/semery/projects/shape-net-utils/car_models/ShapeNetCore.v2/02958343/1a0bc9ab92c915167ae33d942430658c/models/model_normalized.obj"
-    OBJ_EXPORT_PATH = "/Users/semery/projects/shape-net-utils/shrinkwrap-exports/02958343-1a0bc9ab92c915167ae33d942430658c.obj"
-    do_naive_shrinkwrap(OBJ_IMPORT_PATH, OBJ_EXPORT_PATH, subdivisions = 2)
+    if len(argv) < 3:
+        print("Usage: %s <import-path>.obj <export-path>.obj [<num-subdivisions>]"%(args[0]))
+
+    DEFAULT_SUBDIVISIONS = 2
+    execute_shrinkwrap(
+        import_path = args[1],
+        export_path = args[2],
+        subdivisions = args[3] if len(args) > 2 else DEFAULT_SUBDIVISIONS
+    )
+
+    # OBJ_IMPORT_PATH = "/Users/semery/projects/shape-net-utils/car_models/ShapeNetCore.v2/02958343/371c5e74c66d22d451973ec97171fea3/models/model_normalized.obj"
+    # OBJ_EXPORT_PATH = "/Users/semery/projects/shape-net-utils/shrinkwrap-exports/02958343-371c5e74c66d22d451973ec97171fea3.obj"
+
+    # execute_shrinkwrap(OBJ_IMPORT_PATH, OBJ_EXPORT_PATH, subdivisions = 2)
