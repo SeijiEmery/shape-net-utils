@@ -1,3 +1,6 @@
+import os
+from serialization_utils import serialize_object, deserialize_object
+
 
 def parse_obj_line (line, data, 
         check_verts_normalized = True,
@@ -147,7 +150,21 @@ def obj_extract_params (objdata):
         ))
     print("%s remaining vertices"%(len(objdata['verts'][8:])))
 
-def extract_params (*objpaths, **kwargs):
+    def flatten (array):
+        output = []
+        for elem in array:
+            output += list(elem)
+        return output
+
+    return flatten(objdata['verts'])
+
+def extract_params (*objpaths, export_path=None, **kwargs):
+    if export_path is None:
+        raise Exception("Invalid export path!")
+
+    if not os.path.exists(export_path):
+        os.makedirs(export_path)
+
     for path in objpaths:
         print("Loading '%s'"%path)
         objdata, errors = read_obj(path, expect_verts_normalized=False, **kwargs)
@@ -155,7 +172,15 @@ def extract_params (*objpaths, **kwargs):
             print("Failed to load '%s' (%d errors):\n\t%s"%(
                 path, len(errors), '\n\t'.join(errors)))
         else:
-            obj_extract_params(objdata)
+            data = obj_extract_params(objdata)
+            filename = os.path.split(path)[1].split('.')[0]
+            for ext in ('.json', '.pkl', '.json.zip', '.pkl.zip'):
+                output_path = os.path.join(export_path, filename + ext)
+                serialize_object(output_path, data)
+
+            # print("Saving as '%s'"%output_path)
+            # with open(output_path, 'wb') as f:
+            #     pickle.dump(data, f)
 
 if __name__ == '__main__':
     # validate_data_samples(
@@ -163,4 +188,5 @@ if __name__ == '__main__':
         '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
         '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
         '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
+        export_path='./data_params'
     )

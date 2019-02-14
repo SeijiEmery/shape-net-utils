@@ -1,8 +1,8 @@
 import os
-import json
 import zipfile
-import pickle
+import json
 from time import time
+from serialization_utils import serialize_object, deserialize_object
 
 #
 # Helper functions
@@ -175,45 +175,6 @@ class FileCache ():
     def __getattr__ (self, attr):
         return self.archive.__getattribute__(attr)
 
-# SERIALIZATION_TYPE = '.pkl.zip'
-# SERIALIZATION_TYPE = '.pkl'
-SERIALIZATION_TYPE = '.json'
-
-def open_maybe_compressed (path, mode, action):
-    if path.endswith('.zip'):
-        with zipfile.Zipfile(path, mode.strip('b')) as zfile:
-            with zfile.open(path.strip('.zip'), mode.strip('b')) as f:
-                return action(f)
-    else:
-        with open(path, mode) as f:
-            return action(f)
-
-def serialize_object (name, data):
-    print("Saving '%s'..."%name)
-    t0 = time()
-    actions = {
-        '.json': lambda f: f.write(json.dumps(data)),
-        '.pkl': lambda f: pickle.dump(f, data)
-    }
-    mode = { '.json': 'w', 'pkl': 'wb' }
-    path = name + SERIALIZATION_TYPE
-    ext = SERIALIZATION_TYPE.split('.zip')[0]
-    open_maybe_compressed(path, mode[ext], actions[ext])
-    print("Saved in %s"%(time() - t0))
-
-def deserialize_object (name):
-    print("Attempting to load '%s'..."%name)
-    t0 = time()
-    actions = {
-        '.json': lambda f: json.loads(f.read()),
-        '.pkl': lambda f: pickle.load(f)
-    }
-    mode = { '.json': 'r', 'pkl': 'rb' }
-    path = name + SERIALIZATION_TYPE
-    ext = SERIALIZATION_TYPE.split('.zip')[0]
-    result = open_maybe_compressed(path, mode[ext], actions[ext])
-    print("Loaded in %s"%(time() - t0))
-    return result
 
 class ShapenetZipArchive (ShapenetArchive):
     """ Encapsulates a lazily loaded ZipFile archive w/ file caching """
@@ -221,7 +182,9 @@ class ShapenetZipArchive (ShapenetArchive):
     def __init__ (self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.archive = None
-        self.file_index = None
+        self.synsets = None
+        self.models = None
+        # self.file_index = None
         self.cache_dir = './.cached-files'
 
     def lazy_load (self):
@@ -233,45 +196,105 @@ class ShapenetZipArchive (ShapenetArchive):
             print("Loaded in %s"%(time() - t0))
 
     def load_file_index (self):
-        if not self.file_index:
+        SYNSETS_PATH = 'synsets.json.zip'
+        MODELS_PATH  = 'models.json.zip'
+
+        # if not self.file_index:
+        if not self.synsets:
             try:
-                self.file_index = deserialize_object('file_index')
+                self.synsets, self.models = deserialize_object(SYNSETS_PATH), deserialize_object(MODELS_PATH)
+                # self.file_index = deserialize_object('file_index')
+                return
             except FileNotFoundError:
-                self.lazy_load()
-                self.file_index = self.build_file_index(self.archive.namelist())
-                serialize_object('file_index', self.file_index)
+                pass
+            except json.decoder.JSONDecodeError:
+                pass
+            self.lazy_load()
+            self.synsets, self.models = self.build_file_index(self.archive.namelist())
+            # self.file_index = self.build_file_index(self.archive.namelist())
+            # serialize_object('file_index', self.file_index)
+            serialize_object(SYNSETS_PATH, self.synsets)
+            serialize_object(MODELS_PATH, self.models)
 
     def build_file_index (self, files):
         print("Building file index...")
         t0 = time()
-        files_by_first_subdir_prefix = {}
-        for file in files:
+        synsets = {}
+        models = {}
+        for path in files:
             try:
-                prefix = file.split('/')[1]
-                if prefix not in files_by_first_subdir_prefix:
-                    files_by_first_subdir_prefix[prefix] = list()
-                files_by_first_subdir_prefix[prefix].append(file)
+                parts = path.split('/')
+                rootdir, synsetId, model = parts[:3]
+                uuid = synsetId + '/' + model
+                file = '/'.join(parts[3:])
+
+                if synsetId not in synsets:
+                    synsets[synsetId] = set()
+                synsets[synsetId].add(model)
+
+                if uuid not in models:
+                    models[uuid] = {
+                        'synsetId': synsetId,
+                        'info': None,
+                        'obj': None,
+                        'mtl': None,
+                        'textures': [],
+                        'solid.binvox': None,
+                        'surface.binvox': None,
+                        'other': []
+                    }
+                item = models[uuid]
+                if item['synsetId'] != synsetId:
+                    raise Exception("Conflicting model ids! '%s', synset '%s' and '%s'"%(
+                        model, item['synsetId'], synsetId))
+
+                ext = '.'.join(file.split('.')[1:])
+                if not file:
+                    pass
+                elif ext in ('obj', 'mtl', 'solid.binvox', 'surface.binvox', 'json'):
+                    if ext == 'json':
+                        ext = 'info'
+                    if item[ext] is not None:
+                        raise Exception("Duplicate file in model '%s': '%s', '%s'!"%(
+                            model, item[ext], path))
+                    item[ext] = path
+                elif file.startswith('texture') and ext == 'jpg':
+                    item['textures'].append(path)
+                else:
+                    item['other'].append(path)
+                # prefix = file.split('/')[1]
+                # if prefix not in files_by_first_subdir_prefix:
+                #     files_by_first_subdir_prefix[prefix] = list()
+                # files_by_first_subdir_prefix[prefix].append(file)
+            except ValueError:
+                print("Can't unpack '%s'"%path)
             except IndexError:
                 pass
 
-        print(files_by_first_subdir_prefix.keys())
+        synsets = { key: list(values) for key, values in synsets.items() }
+
+        print("synsets: %s"%synsets.keys())
+        print("models: %s"%models.keys())
+        # print(files_by_first_subdir_prefix.keys())
         print("Finished in %s"%(time() - t0))
-        return files_by_first_subdir_prefix
+        return synsets, models
+        # return files_by_first_subdir_prefix
 
     def get_files_to_extract (self, paths):
         self.load_file_index()
         missing_files = [
             path for path in paths
-            if path not in self.file_index
+            if path not in self.synsets
         ]
         if missing_files:
             print("Warning: archive is incomplete, missing %s / %s synset subdirectories: %s"%(
                 len(missing_files), len(paths), missing_files))
-        return {
-            path: self.file_index[path]
-            for path in paths
-            if path in self.file_index
-        }
+        return {}
+        # return {
+        #     path: self.file_index[path]
+        #     for path in paths
+        #     if path in self.file_index
+        # }
 
     def extract_files (self, paths, target_dir):
         files = self.get_files_to_extract(paths)
