@@ -113,10 +113,13 @@ if __name__ == '__main__':
     SUBDIVISION_LEVELS = 2
     NUM_WORKERS = 4
 
-    run_shrinkwrap_tasks(
-        './car_models/ShapeNetCore.v2',
-        'shrinkwrap-exports',
-        SUBDIVISION_LEVELS,
-        NUM_WORKERS,
-        # use_cached_tasks = True
-    )
+    if len(argv) < 2:
+        print("Usage: %s <path/to/shapenet/dir> [<export-path>] [<worker-threads>] [<subdivision-levels>]"%argv[0])
+        # sys.exit(-1)
+    else:
+        run_shrinkwrap_tasks(
+            argv[1],
+            'shrinkwrap-exports' if len(argv) < 3 else argv[2],
+            SUBDIVISION_LEVELS if len(argv) < 5 else min(6, max(0, int(argv[4]))),
+            NUM_WORKERS if len(argv) < 4 else min(32, max(1, int(argv[3])))
+        )

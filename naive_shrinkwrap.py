@@ -72,7 +72,7 @@ def delete_everything_but_object (obj):
 def export_obj (obj, path):
     delete_everything_but_object(obj)
     bpy.ops.export_scene.obj(filepath=path)
-
+    print("Done: exported to '%s'"%path)
 
 def execute_shrinkwrap (import_path, export_path, subdivisions):
     clear_all_objects()
@@ -83,6 +83,10 @@ def execute_shrinkwrap (import_path, export_path, subdivisions):
     print("Imported object = %s"%obj)                       # joined obj components
     print("Target object = %s"%cube)
     apply_shrinkwrap(src=obj, dst=cube, subdivisions=subdivisions)
+
+    basedir = os.path.split(export_path)[0]
+    if basedir and not os.path.exists(basedir):
+        os.makedirs(basedir)
     export_obj(cube, export_path)
 
 if __name__ == '__main__':
@@ -91,9 +95,9 @@ if __name__ == '__main__':
 
     DEFAULT_SUBDIVISIONS = 2
     execute_shrinkwrap(
-        import_path = args[1],
-        export_path = args[2],
-        subdivisions = args[3] if len(args) > 2 else DEFAULT_SUBDIVISIONS
+        import_path = argv[1],
+        export_path = argv[2],
+        subdivisions = DEFAULT_SUBDIVISIONS if len(argv) < 4 else int(argv[3])
     )
 
     # OBJ_IMPORT_PATH = "/Users/semery/projects/shape-net-utils/car_models/ShapeNetCore.v2/02958343/371c5e74c66d22d451973ec97171fea3/models/model_normalized.obj"

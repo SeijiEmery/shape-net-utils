@@ -1,4 +1,5 @@
 import os
+import sys
 from serialization_utils import serialize_object, deserialize_object
 
 
@@ -262,8 +263,17 @@ if __name__ == '__main__':
     #     ],
     #     export_path='./data_params'
     # )
-    extract_params(
-        directory='shrinkwrap-exports',
-        export_path='shrinkwrap-export-params',
-        check_normals_normalized=False,
-    )
+    # extract_params(
+    #     directory='shrinkwrap-exports',
+    #     export_path='shrinkwrap-export-params',
+    #     check_normals_normalized=False,
+    # )
+
+    if len(sys.argv) < 3:
+        print("Usage: %s <directory-containing-obj-files> <export-path>"%sys.argv[0])
+    else:
+        extract_params(
+            directory = sys.argv[1],
+            export_path = sys.argv[2],
+            check_normals_normalized = False
+        )
