@@ -49,14 +49,17 @@ Here is a list of all the ShapeNet v2 car synsets (by tag):
 
     python3 read_obj.py <directory-containing-obj-files> <export-path> [<file-ext>]
 
-This writes out a bunch of json files to export-path (flat array of vertices). To load this in python:
-    
-    directory = <export-path>
-    data = {}
-    for file in os.listdir(directory):
-        if file.endswith('.json'):
-            with open(os.path.join(directory, file), 'r') as f:
-                data[file] = json.loads(f.read())
+This writes out a bunch of json files to export-path (flat array of vertices). 
+
+## To load + save as a pkl (python serialized data) file:
+
+    load_params.py <path-you-exported-json-files-to> data.pkl
+
+## To load that data from a pkl:
+
+    from serialization_utils import deserialize_object
+
+    data = deserialize_object('data.pkl')
     dataset_values = np.array(data.values())
     dataset_names  = list(data.keys())
 
@@ -66,8 +69,9 @@ This writes out a bunch of json files to export-path (flat array of vertices). T
 ## From the nobuyuki dataset: http://nobuyuki-umetani.com (exploring generative 3d shapes using autoencoder networks)
 
     python3 read_obj.py path/to/cubeheightobj nobuyuki-export json
+    python3 load_params.py nobuyuki-export nobuyuki-data.pkl
 
-    do stuff with the json files...
+    import data as above...
 
 ## From the shapenet dataset (note: this will take a while...)
 
@@ -79,8 +83,10 @@ This writes out a bunch of json files to export-path (flat array of vertices). T
     python3 shrinkwrap_processor.py path/to/shapenet-minivan path/to/minivan-shrinkwrapped
 
     python3 read_obj.py path/to/minivan-shrinkwrapped path/to/minivan-params
+    python3 load_params.py path/to/minivan-params minivan-data.pkl
 
-    do stuff with the json files...
+    import data as above...
+
 
 Note: shrinkwrap_processor may do weird things b/c apparently blender + multiprocessing weren't, uh... intended to work together. They -seem- to work together w/out errors, but, uh, if you have issues that wouldn't be surprising. Also, note that multiprocessing will spawn zombie python processes if you just try to kill the main process (ie. killing the main process won't kill the other running processes). You can 'fix' this by running `pkill python` (on \*nix), or equivalent on windows. To bypass this problem altogether, set the # of processes to 1, ie
 
