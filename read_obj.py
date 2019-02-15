@@ -35,7 +35,13 @@ def parse_obj_line (line, data,
         data['normals'] += [ (x, y, z) ]
 
     elif line.startswith('f '):
-        indices = list(map(int, line[2:].strip().split()))
+        # if '/' in line:
+        #     indices = list(map(int, line[2:].strip().split('/')))
+        # else:
+        indices = [
+            int(indices.split('/')[0])
+            for indices in line[2:].strip().split()
+        ]
 
         if check_face_index_bounds:
             data['min_face_index'] = min(data['min_face_index'], *indices)
@@ -150,6 +156,51 @@ def obj_extract_params (objdata):
         ))
     print("%s remaining vertices"%(len(objdata['verts'][8:])))
 
+    # plane_verts = [
+    #     (dir, [ corner for i, corner in enumerate(corners)
+    #         if ((i >> (k // 2)) & 1) == (k & 1) 
+    #     ])
+    #     for k, dir in enumerate((
+    #         (-1.0, 0.0, 0.0),
+    #         (+1.0, 0.0, 0.0),
+    #         (0.0, -1.0, 0.0),
+    #         (0.0, +1.0, 0.0),
+    #         (0.0, 0.0, -1.0),
+    #         (0.0, 0.0, +1.0),
+    #     ))
+    # ]
+
+    # def subv (a, b):
+    #     return tuple([ a - b for a, b in zip(a, b) ])
+
+    # def mulv (a, s):
+    #     return tuple([ a * s for a in a ])
+
+    # def addv (a, b):
+    #     return tuple([ a + b for a, b in zip(a, b) ])
+
+    # for i, (dir, verts) in enumerate(plane_verts):
+    #     print("plane %s: %s"%(i, dir))
+    #     print("\t%s"%"\n\t".join(map(str, verts)))
+    #     print("plane direction vectors:")
+    #     for i, a in enumerate(verts):
+    #         for j, b in enumerate(verts):
+    #             if j >= i:
+    #                 break
+    #             print("\t%s, %s => %s"%(i, j, subv(a, b)))
+
+    #     u, u0 = subv(verts[1], verts[0]), verts[0]
+    #     v, v0 = subv(verts[2], verts[0]), verts[0]
+    #     print("\tlet u = %s * i + %s"%(u, u0))
+    #     print("\tlet v = %s * j + %s"%(v, v0))
+    #     for i in [ 1.0, 0.0 ]:
+    #         for j in [ 1.0, 0.0 ]:
+    #             print("\t\t=> %s, %s = %s"%(
+    #                 i, j, addv(u0, addv(
+    #                     mulv(u, i),
+    #                     mulv(v, j)
+    #                 ))))
+
     def flatten (array):
         output = []
         for elem in array:
@@ -202,12 +253,17 @@ def extract_params (
 
 if __name__ == '__main__':
     # validate_data_samples(
+    # extract_params(
+    #     # directory='/Users/semery/Downloads/cubeheightobj',
+    #     files = [
+    #         '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
+    #         '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
+    #         '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
+    #     ],
+    #     export_path='./data_params'
+    # )
     extract_params(
-        # directory='/Users/semery/Downloads/cubeheightobj',
-        files = [
-            '/Users/semery/Downloads/cubeheightobj/b17d638e7def9adbc8a6c4a50ada6f9f.obj',
-            '/Users/semery/Downloads/cubeheightobj/b1c6a021c1c47884c9463ecce7643e8e.obj',
-            '/Users/semery/Downloads/cubeheightobj/ff564f7ec327ed83391a2a133df993ee.obj',
-        ],
-        export_path='./data_params'
+        directory='shrinkwrap-exports',
+        export_path='shrinkwrap-export-params',
+        check_normals_normalized=False,
     )
