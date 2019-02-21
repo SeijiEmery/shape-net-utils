@@ -54,6 +54,10 @@ def apply_shrinkwrap (src, dst, subdivisions):
 
     shrinkwrap_modifier = dst.modifiers.new(name='shrinkwrap', type='SHRINKWRAP')
     shrinkwrap_modifier.target = src
+    shrinkwrap_modifier.wrap_method = "PROJECT"
+    shrinkwrap_modifier.cull_face = "OFF"
+    shrinkwrap_modifier.use_positive_direction = True
+    shrinkwrap_modifier.use_negative_direction = True
 
     print("Applying modifiers...")
     bpy.context.scene.objects.active = dst
@@ -71,7 +75,11 @@ def delete_everything_but_object (obj):
 
 def export_obj (obj, path):
     delete_everything_but_object(obj)
-    bpy.ops.export_scene.obj(filepath=path)
+    bpy.ops.export_scene.obj(
+        filepath=path,
+        use_materials=False,
+        keep_vertex_order=True,
+    )
     print("Done: exported to '%s'"%path)
 
 def execute_shrinkwrap (import_path, export_path, subdivisions):
